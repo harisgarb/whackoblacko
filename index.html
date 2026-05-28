@@ -715,6 +715,20 @@
       <p>Your whitelist application has been received. Follow @WhackoBlacko on X for mint date announcements. Stay Whacko!</p>
     </div>
 
+    <!-- Duplicate Warning -->
+    <div class="success-msg" id="duplicate-msg" style="border-color:#f6ad55;background:linear-gradient(135deg,#fffaf0,white);display:none;">
+      <div class="emoji">⚠️</div>
+      <h3 style="color:#dd6b20;">Already Registered</h3>
+      <p id="duplicate-detail">This username or wallet address is already on the whitelist.</p>
+    </div>
+
+    <!-- Error -->
+    <div class="success-msg" id="error-msg" style="border-color:#fc8181;background:linear-gradient(135deg,#fff5f5,white);display:none;">
+      <div class="emoji">❌</div>
+      <h3 style="color:#c53030;">Something Went Wrong</h3>
+      <p>Could not reach the server. Please check your connection and try again.</p>
+    </div>
+
   </div>
 
 </div>
@@ -973,38 +987,64 @@
 
     const username = usernameRaw.replace(/^@/, '');
     const submitBtn = document.querySelector('.submit-btn');
-    submitBtn.textContent = 'SUBMITTING...';
+    submitBtn.textContent = 'CHECKING...';
     submitBtn.disabled = true;
 
-    const payload = {
-      username,
-      wallet: evm,
-      date: new Date().toLocaleString('en-GB', {
-        day: '2-digit', month: 'short', year: 'numeric',
-        hour: '2-digit', minute: '2-digit'
-      })
-    };
+    // Hide all result panels
+    ['success-msg','duplicate-msg','error-msg'].forEach(id => {
+      document.getElementById(id).style.display = 'none';
+    });
 
-    try {
-      if (!SHEET_URL || SHEET_URL === 'YOUR_APPS_SCRIPT_URL_HERE') {
-        throw new Error('SHEET_URL not configured');
-      }
-      await fetch(SHEET_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-    } catch (err) {
-      console.warn('Sheet submission error (may still have worked):', err.message);
+    const date = new Date().toLocaleString('en-GB', {
+      day: '2-digit', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    });
+
+    if (!SHEET_URL || SHEET_URL === 'YOUR_APPS_SCRIPT_URL_HERE') {
+      submitBtn.textContent = 'SUBMIT APPLICATION';
+      submitBtn.disabled = false;
+      alert('SHEET_URL not configured yet. Follow the Google Sheets setup steps.');
+      return;
     }
 
-    // Always show success — no-cors means we can't read the response
-    submitBtn.textContent = 'SUBMIT APPLICATION';
-    submitBtn.disabled = false;
-    document.querySelector('.wl-form').style.display = 'none';
-    document.getElementById('success-msg').style.display = 'block';
-    document.getElementById('success-msg').scrollIntoView({ behavior: 'smooth' });
+    try {
+      // Use GET with URL params so we can read the response back
+      const url = SHEET_URL
+        + '?action=submit'
+        + '&username=' + encodeURIComponent(username)
+        + '&wallet='   + encodeURIComponent(evm)
+        + '&date='     + encodeURIComponent(date);
+
+      const res  = await fetch(url);
+      const json = await res.json();
+
+      submitBtn.textContent = 'SUBMIT APPLICATION';
+      submitBtn.disabled = false;
+
+      if (json.status === 'duplicate') {
+        document.getElementById('duplicate-detail').textContent = json.message;
+        document.getElementById('duplicate-msg').style.display = 'block';
+        document.getElementById('duplicate-msg').scrollIntoView({ behavior: 'smooth' });
+        return;
+      }
+
+      if (json.status === 'error') {
+        document.getElementById('error-msg').style.display = 'block';
+        document.getElementById('error-msg').scrollIntoView({ behavior: 'smooth' });
+        return;
+      }
+
+      // status === 'ok'
+      document.querySelector('.wl-form').style.display = 'none';
+      document.getElementById('success-msg').style.display = 'block';
+      document.getElementById('success-msg').scrollIntoView({ behavior: 'smooth' });
+
+    } catch (err) {
+      submitBtn.textContent = 'SUBMIT APPLICATION';
+      submitBtn.disabled = false;
+      document.getElementById('error-msg').style.display = 'block';
+      document.getElementById('error-msg').scrollIntoView({ behavior: 'smooth' });
+    }
   }
 
   // ===== ADMIN LOGIN =====
